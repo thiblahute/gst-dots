@@ -49,6 +49,7 @@ chokidar.watch('public/svg/*svg').on('all', async (event, path) => {
 });
 
 app.listen(3000, () => {
+    console.log('Watching logs in ' + (dotDir ? dotDir : '.'));
     console.log('Browse to http://localhost:3000');
 });
 

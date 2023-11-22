@@ -5,16 +5,134 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GstDots</title>
   </head>
+
+  <style>
+    body {
+        margin: 0;
+        font-family: 'Lato', sans-serif;
+        text-align: center;
+    }
+
+    .preview {
+      width: -webkit-fill-available;
+    }
+
+    .internalframe {
+      flex-grow: 1;
+       border: none;
+       margin: 0;
+       padding: 0;
+    }
+
+    .overlay {
+        height: 100%;
+        width: 0;
+        position: fixed;
+        z-index: 1;
+        top: 0;
+        left: 0;
+        background-color: rgb(0,0,0);
+        background-color: rgba(0,0,0, 0.9);
+        overflow-x: hidden;
+        transition: 0.5s;
+        visibility: "visible";
+    }
+
+    .overlay-content {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .overlay a {
+        padding: 8px;
+        text-decoration: none;
+        font-size: 36px;
+        color: #818181;
+        display: block;
+        transition: 0.3s;
+    }
+
+    .overlay a:hover, .overlay a:focus {
+        color: #f1f1f1;
+    }
+
+    .overlay .closebtn {
+        <!-- position: absolute; -->
+        top: 20px;
+        right: 45px;
+        font-size: 30px;
+    }
+
+    @media screen and (max-height: 250000px) {
+      .overlay a {font-size: 20px}
+      .overlay .closebtn {
+        text-align: right;
+        font-size: 40px;
+        top: 15px;
+        right: 35px;
+      }
+    }
+  </style>
+
+  <script>
+    function openNav(navId) {
+      document.getElementById(navId).style.width = "100%";
+      document.getElementById(navId).style.visibility = "visible";
+    }
+
+    function closeNav(navId) {
+      document.getElementById(navId).style.width = "0%";
+      document.getElementById(navId).style.visibility = "hidden";
+    }
+
+    window.addEventListener('DOMContenLoaded', () => {
+      window.scrollTo(0,document.querySelector(".scrollingContainer").scrollHeight);
+    });
+
+  </script>
+
   <body>
     <h1>GStreamer Pipeline graphs</h1>
     <% dots.forEach(function(dot) { %>
-    	<h3><%=dot%></h3>
-	<a href="<%=dot%>"><img src="<%=dot%>" alt="image" width="800"></a>
+      <hr/>
+      <div onclick="openNav('<%=dot%>')">
+        <h2><%=dot%></h2>
+        <img src="<%=dot%>" alt="image" class="preview">
+      </div>
+
+      <div id="<%=dot%>" class="overlay">
+        <a href="javascript:void(0)" class="closebtn" onclick="closeNav('<%=dot%>')">&times;</a>
+        <div class="overlay-content">
+          <h1><a href="<%=dot%>" target="_blank" rel="noopener noreferrer"><%=dot%></a></h1>
+          <iframe src="<%=dot%>" class="internalframe"></iframe>
+        </div>
+      </div>
     <% })%>
+
     <script>
-        window.addEventListener('DOMContenLoaded', () => {
-	        window.scrollTo(0,document.querySelector(".scrollingContainer").scrollHeight);
+        document.addEventListener('keyup', function(e) {
+          if (e.key == "Escape") {
+            for (let overlay of document.getElementsByClassName("overlay")) {
+              overlay.style.width = "0%";
+            }
+          }
         });
-    </script> 
+
+
+        for (let iframe of document.getElementsByClassName("internalframe")) {
+          iframe.addEventListener('keyup', function(e) {
+            if (e.key == "Escape") {
+              for (let overlay of document.getElementsByClassName("overlay")) {
+                overlay.style.width = "0%";
+              }
+            }
+          });
+        }
+
+    </script>
   </body>
 </html>
+
