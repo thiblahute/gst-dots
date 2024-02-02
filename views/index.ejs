@@ -37,6 +37,7 @@
         overflow-x: hidden;
         transition: 0.5s;
         visibility: "visible";
+        display: none;
     }
 
     .overlay-content {
@@ -80,11 +81,13 @@
 
   <script>
     function openNav(navId) {
+      document.getElementById(navId).style.display = "block";
       document.getElementById(navId).style.width = "100%";
       document.getElementById(navId).style.visibility = "visible";
     }
 
     function closeNav(navId) {
+      document.getElementById(navId).style.display = "none";
       document.getElementById(navId).style.width = "0%";
       document.getElementById(navId).style.visibility = "hidden";
     }
@@ -104,7 +107,7 @@
       <hr/>
       <div onclick="openNav('<%=html_file%>')">
         <h2><%=fname%></h2>
-        <img src="<%=svg_file%>" alt="image" class="preview">
+        <img src="<%=svg_file%>" alt="image" class="preview" loading="lazy">
       </div>
 
       <div id="<%=html_file%>" class="overlay">
@@ -112,7 +115,7 @@
         <div class="overlay-content">
           <h1><a href="<%=html_file%>" target="_blank" rel="noopener noreferrer"><%=fname%></a></h1>
           <!-- <h4 id="instructions">Click node to highlight; Shift-scroll to zoom; Esc to unhighlight</h4> -->
-          <iframe src="<%=html_file%>" class="internalframe"></iframe>
+          <iframe loading="lazy" src="<%=html_file%>" class="internalframe"></iframe>
         </div>
       </div>
     <% })%>
