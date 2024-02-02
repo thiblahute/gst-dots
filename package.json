@@ -9,6 +9,7 @@
     "start": "node index.js"
   },
   "dependencies": {
+    "@folder/xdg": "^4.0.1",
     "chokidar": "^3.5.2",
     "connect-livereload": "^0.6.1",
     "ejs": "^3.1.6",

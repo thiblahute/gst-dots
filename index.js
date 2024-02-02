@@ -5,6 +5,8 @@ const fs = require('fs');
 const livereload = require("livereload");
 const path = require('path');
 const { spawn } = require("child_process");
+const xdg = require('@folder/xdg');
+
 
 const app = express();
 
@@ -20,7 +22,8 @@ app.get('', (req, res) => {
     });
 });
 
-const dotDir = process.env.GST_DEBUG_DUMP_DOT_DIR;
+const xdg_dirs = xdg()
+const dotDir = process.env.GST_DEBUG_DUMP_DOT_DIR ? process.env.GST_DEBUG_DUMP_DOT_DIR : `${xdg_dirs.cache}/gstreamer-dots/`;
 const svgDir = './public/svg/';
 
 if (fs.existsSync(svgDir)) {
