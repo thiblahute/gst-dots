@@ -97,18 +97,22 @@
 
   <body>
     <h1>GStreamer Pipeline graphs</h1>
-    <% dots.forEach(function(dot) { %>
+    <% dots.forEach(function(html_file) { 
+      const svg_file = html_file.replace('.html', '.svg');
+      const fname = html_file.replace('.html', '');
+     %>
       <hr/>
-      <div onclick="openNav('<%=dot%>')">
-        <h2><%=dot%></h2>
-        <img src="<%=dot%>" alt="image" class="preview">
+      <div onclick="openNav('<%=html_file%>')">
+        <h2><%=fname%></h2>
+        <img src="<%=svg_file%>" alt="image" class="preview">
       </div>
 
-      <div id="<%=dot%>" class="overlay">
-        <a href="javascript:void(0)" class="closebtn" onclick="closeNav('<%=dot%>')">&times;</a>
+      <div id="<%=html_file%>" class="overlay">
+        <a href="javascript:void(0)" class="closebtn" onclick="closeNav('<%=html_file%>')">&times;</a>
         <div class="overlay-content">
-          <h1><a href="<%=dot%>" target="_blank" rel="noopener noreferrer"><%=dot%></a></h1>
-          <iframe src="<%=dot%>" class="internalframe"></iframe>
+          <h1><a href="<%=html_file%>" target="_blank" rel="noopener noreferrer"><%=fname%></a></h1>
+          <!-- <h4 id="instructions">Click node to highlight; Shift-scroll to zoom; Esc to unhighlight</h4> -->
+          <iframe src="<%=html_file%>" class="internalframe"></iframe>
         </div>
       </div>
     <% })%>

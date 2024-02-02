@@ -28,20 +28,45 @@ if (fs.existsSync(svgDir)) {
 }
 fs.mkdirSync(svgDir);
 chokidar.watch((dotDir ? dotDir : '.') + '/*dot').on('all', async (event, dotFile) => {
-    const out = svgDir + path.basename(dotFile).replace('.dot', '.svg');
+    const svg_file = svgDir + path.basename(dotFile).replace('.dot', '.svg');
+    const html_file = svgDir + path.basename(dotFile).replace('.dot', '.html');
 
     if (event == 'add') {
-        spawn('dot', ['-Tsvg', dotFile, '-o', out]);
-    } else if (event == 'unlink' && fs.existsSync(out)) {
-        fs.rmSync(out);
+        spawn('dot', ['-Tsvg', dotFile, '-o', svg_file]);
+
+        fs.readFile('templates/single_graph_template.html', 'utf8', (err, template) => {
+            if (err) {
+                console.error(err);
+                return;
+            }
+
+            // Generate an HTML file from the Template
+            const graphHtml = template.replace('{{ svg_file_path }}', `${path.basename(dotFile).replace('.dot', '.svg')}`);
+
+            // Save the generated HTML to a file
+            fs.writeFile(`${html_file}`, graphHtml, (err) => {
+                if (err) {
+                    console.error(err);
+                } else {
+                    console.log(`${html_file} has been saved!`);
+                }
+            });
+        });
+    } else if (event == 'unlink') {
+        if (fs.existsSync(svg_file)) {
+            fs.rmSync(svg_file);
+        }
+        if (fs.existsSync(html_file)) {
+            fs.rmSync(html_file);
+        }
     }
 });
 
-chokidar.watch('public/svg/*svg').on('all', async (event, path) => {
-    const svg = path.replace('public/', '');
-    const index = dots.indexOf(svg);
+chokidar.watch('public/svg/*html').on('all', async (event, path) => {
+    const html_file = path.replace('public/', '');
+    const index = dots.indexOf(html_file);
     if (event == 'add' && index < 0) {
-        dots.push(svg);
+        dots.push(html_file);
     } else if (event == 'unlink' && index >= 0) {
         dots.splice(index, 1);
     }
