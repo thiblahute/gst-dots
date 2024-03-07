@@ -53,7 +53,7 @@
   GraphvizSvg.DEFAULTS = {
     url: null,
     svg: null,
-    shrink: '0.125pt',
+    shrink: '0.10pt',
     tooltips: {
       init: function ($graph) {
         var $a = $(this)
@@ -249,7 +249,7 @@
     this.zoom = {width: $svg.attr('width'), height: $svg.attr('height'), percentage: null }
     this.scaleView(100.0)
     $element.mousewheel(function (evt) {
-        if (evt.shiftKey && evt.ctrlKey) {
+        if (evt.ctrlKey) {
           var percentage = that.zoom.percentage
           percentage += evt.deltaY * evt.deltaFactor
           if (percentage < 100.0) {
@@ -272,6 +272,25 @@
           $element.scrollTop((ry * $svg.height()) + 0.5 - py)
           return false // stop propogation
         }
+      })
+
+    $element.on("keydown", function (evt) {
+      console.log(evt)
+      if (evt.shiftKey) {
+        $element.css('cursor', 'move')
+      }
+    })
+
+    $element.on("keyup", function (evt) {
+      console.log(evt)
+      if (evt.shiftKey) {
+        $element.css('cursor', 'auto')
+      }
+    })
+    $element
+      .on('mousemove', function(e){
+        var $svg = this.$svg
+        $element.css({'transform-origin': ((e.pageX - $(this).offset().left) / $(this).width()) * 100 + '% ' + ((e.pageY - $(this).offset().top) / $(this).height()) * 100 +'%'});
       })
   }
 

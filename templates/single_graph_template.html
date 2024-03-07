@@ -23,7 +23,7 @@ furnished to do so, subject to the following conditions:
 <html>
   <head>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.4/css/bootstrap.min.css">
-    <link rel="stylesheet" href="css/graphviz.svg.css">
+    <link rel="stylesheet" href="/css/graphviz.svg.css">
   </head>
 
   <style>
@@ -38,12 +38,16 @@ furnished to do so, subject to the following conditions:
         font-size: 14px;
         text-align: left;
       }
+
     </style>
   <body>
+    <h1 style="text-align: center"> {{ TITLE }}</h1>
+
     <div id="graph" style="width: 100%; height: 100%; overflow: scroll;"></div>
     <div class="floating-rectangle" id="instructions">
       Click node to highlight<br/>Shift-Ctrl-scroll to zoom<br/>Esc to unhighlight
     </div>
+
 
 
     <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.3.min.js"></script>

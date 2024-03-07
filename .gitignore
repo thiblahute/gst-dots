@@ -1,2 +1,4 @@
-node_modules
-public/svg
+.generated/
+target/
+**/*.rs.bk
+

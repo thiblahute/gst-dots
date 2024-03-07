@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GstDots</title>
+    <link rel="icon" type="image/png" href="images/favicon-16.png" sizes="16x16">
+    <link rel="icon" type="image/png" href="images/favicon-32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="images/favicon-57.png" sizes="57x57">
+    <link rel="icon" type="image/png" href="images/favicon-64.png" sizes="64x64">
+    <link rel="icon" type="image/png" href="images/favicon-76.png" sizes="76x76">
+    <link rel="icon" type="image/png" href="images/favicon-96.png" sizes="96x96">
+    <link rel="icon" type="image/png" href="images/favicon-128.png" sizes="128x128">
+    <link rel="icon" type="image/png" href="images/favicon-192.png" sizes="192x192">
+    <link rel="icon" type="image/png" href="images/favicon-228.png" sizes="228x228">
+  </head>
+
+  <style>
+    body {
+        margin: 0;
+        font-family: 'Lato', sans-serif;
+        text-align: center;
+    }
+
+    .instructions {
+        color: #fcfcfc;
+        position: absolute;
+        z-index: 100;
+        bottom: 0px;
+        left: 0px;
+    }
+
+    .preview {
+      width: -webkit-fill-available;
+      width: -moz-available;
+    }
+
+    .internalframe {
+      flex-grow: 1;
+       border: none;
+       margin: 0;
+       padding: 0;
+    }
+
+    .overlay {
+        height: 100%;
+        width: 100%;
+        position: fixed;
+        z-index: 1;
+        top: 0;
+        left: 0;
+        background-color: rgb(0,0,0);
+        background-color: rgba(0,0,0, 0.9);
+        overflow-x: hidden;
+        transition: 0.5s;
+        visibility: "visible";
+        display: block;
+    }
+
+    .overlay-content {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .overlay a {
+        padding: 8px;
+        text-decoration: none;
+        font-size: 36px;
+        color: #818181;
+        display: block;
+        transition: 0.3s;
+    }
+
+    .overlay a:hover, .overlay a:focus {
+        color: #f1f1f1;
+    }
+
+    .overlay .closebtn {
+        top: 20px;
+        right: 45px;
+        font-size: 30px;
+    }
+
+    @media screen and (max-height: 250000px) {
+      .overlay a {font-size: 20px}
+      .overlay .closebtn {
+        text-align: right;
+        font-size: 20px;
+        top: 15px;
+        right: 35px;
+      }
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
+  <script>
+    let ws;
+
+    function closeNav(navId) {
+      removePipelineOverlay();
+    }
+
+    function createOverlayElement(html_file, fname) {
+      const overlayDiv = document.createElement('div');
+      overlayDiv.id = "overlay";
+      overlayDiv.className = 'overlay';
+
+      // Create the close button
+      const closeButton = document.createElement('a');
+      closeButton.href = 'javascript:void(0)';
+      closeButton.className = 'closebtn';
+      closeButton.innerHTML = '&times;';
+      closeButton.onclick = (event) => {
+        closeNav(html_file);
+
+        event.stopPropagation();
+      }
+      overlayDiv.appendChild(closeButton);
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'overlay-content';
+
+      const link = document.createElement('a');
+      link.href = `/viewer/${html_file}`;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = fname;
+
+      const iframe = document.createElement('iframe');
+      iframe.loading = 'lazy';
+      iframe.src = `/viewer/${html_file}`;
+      iframe.className = 'internalframe';
+      contentDiv.appendChild(iframe);
+
+      overlayDiv.appendChild(contentDiv);
+
+      return overlayDiv;
+    }
+
+    function createNewDotDiv(pipelines_div, obj, ws) {
+        var div = document.createElement("div");
+        div.id = obj.path
+        div.className = "pipelineDiv";
+        div.setAttribute("data_score", "0");
+
+        var title = document.createElement("h2");
+        title.textContent = div.id.replace(".svg", "");
+        img = document.createElement("img");
+        img.src = `svg/${obj.path}`;
+        img.alt = "image";
+        img.className = "preview";
+        img.loading = "lazy";
+
+        div.appendChild(document.createElement("hr"));
+        div.appendChild(title);
+        div.appendChild(img);
+
+        const html_file = div.id.replace(".svg", ".html");
+        div.onclick = function() {
+          console.info(`Openning ${html_file}`);
+          ws.send(JSON.stringify({type: "Open", path: html_file}));
+        }
+
+        pipelines_div.appendChild(div);
+    }
+
+  function unsetUrlVariable(key) {
+      let url = new URL(window.location.href);
+      let searchParams = new URLSearchParams(url.search);
+      searchParams.delete(key);
+      url.search = searchParams.toString();
+      window.history.pushState({}, '', url);
+  }
+
+    function setUrlVariable(key, value) {
+        let url = new URL(window.location.href);
+        let searchParams = new URLSearchParams(url.search);
+        searchParams.set(key, value);
+        url.search = searchParams.toString();
+
+        window.history.pushState({}, '', url);
+    }
+
+    function updateFromUrl(noHistoryUpdate) {
+      if (window.location.search) {
+        const url = new URL(window.location.href);
+        const pipeline = url.searchParams.get('pipeline');
+        if (pipeline) {
+          ws.send(JSON.stringify({type: "Open", path: pipeline}));
+        }
+      } else {
+        removePipelineOverlay(noHistoryUpdate);
+      }
+    }
+
+    function connectWs() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.hostname;
+      const port = 3000;
+      const wsUrl = `${protocol}//${host}:${port}/ws/`;
+      var pipelines_div = document.getElementById("pipelines");
+
+      ws = new WebSocket(wsUrl);
+      console.info(`Websocklet ${ws} created with ${wsUrl}`);
+      ws.onopen = () => {
+          console.log('WebSocket connected');
+          // Remove all images and let the server tell us what to display
+          while (pipelines_div.firstChild) {
+            pipelines_div.removeChild(pipelines_div.firstChild);
+          }
+      };
+
+      ws.onmessage = function(event) {
+        console.debug(`Received message: ${event.data}`)
+        try {
+          const obj = JSON.parse(event.data);
+          if (obj.type == "SvgCreated") {
+            createNewDotDiv(pipelines_div, obj, ws);
+          } else if (obj.type == "SvgRemoved") {
+            var message = document.getElementById(obj.path);
+            if (message) {
+              console.info(`Removing message ${obj.path}`);
+              message.remove();
+            } else {
+              console.info(`Message ${obj.path} not found`);
+            }
+          } else if (obj.type == "HtmlCreated") {
+              const html_file = obj.path;
+              const allDivs = document.querySelectorAll('.pipelineDiv');
+
+              allDivs.forEach(div => {
+                div.style.display = 'none';
+              });
+
+              document.getElementById('pipelines').appendChild(createOverlayElement(html_file,
+                html_file.replace(".html", "")));
+              setUrlVariable('pipeline', html_file);
+          } else {
+            console.warn(`Unknown message type: ${obj.type}`);
+          }
+        } catch (e) {
+          console.error(`Error: ${e}`);
+
+          throw e;
+        }
+      }
+
+      ws.onclose = (event) => {
+          console.log('WebSocket disconnected', event.reason);
+          // Try to reconnectin 10s
+          setTimeout(connectWs, 10000);
+      };
+
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        updateFromUrl(false);
+      };
+    }
+
+
+    window.addEventListener('popstate', function(event) {
+      updateFromUrl(true);
+    });
+
+    document.addEventListener("DOMContentLoaded", function() {
+      connectWs();
+      connectSearch();
+    });
+
+    function updateSearch() {
+      const input = document.getElementById('search');
+      const allDivs = document.querySelectorAll('.pipelineDiv');
+
+      if (input.value === "") {
+        allDivs.forEach(div => {
+          div.style.display = '';
+          div.setAttribute("data_score", "0");
+        });
+        return;
+      }
+
+      const options = {
+        includeScore: true,
+        threshold: 0.6,
+        keys: ['title']
+      };
+
+
+      const list = Array.from(allDivs).map(div => ({
+        id: div.getAttribute('id'), // Assuming each div has an ID
+        title: div.querySelector('h2').textContent
+      }));
+
+      const fuse = new Fuse(list, options);
+      const results = fuse.search(input.value);
+
+      allDivs.forEach(div => div.style.display = 'none');
+      let divs = results.map(result => {
+        var div = document.getElementById(result.item.id);
+        div.style.display = '';
+        div.setAttribute('data_score', result.score);
+        console.error(`${result.item.id} VS ${input.value} Setting score to ${result.score}`);
+
+        return div;
+      });
+      divs.sort((a, b) => {
+        const scoreA = parseFloat(a.getAttribute('data_score'), 0);
+        const scoreB = parseFloat(b.getAttribute('data_score'), 0);
+
+        return scoreA - scoreB; // For ascending order. Use (scoreB - scoreA) for descending.
+      });
+
+      divs.forEach(div => {
+          // Assuming all divs share the same parent
+          div.parentNode.appendChild(div);
+      });
+    }
+
+    function connectSearch() {
+      const input = document.getElementById('search');
+      input.addEventListener('input', function() {
+        updateSearch();
+
+      });
+    }
+
+    function removePipelineOverlay(noHistoryUpdate) {
+      var overlay = document.getElementById("overlay");
+      if (!overlay) {
+        return;
+      }
+      overlay.parentNode.removeChild(overlay);
+      if (!noHistoryUpdate) {
+        unsetUrlVariable('pipeline');
+      }
+      updateSearch();
+    }
+
+    </script>
+
+  <body>
+    <h1>GStreamer Pipeline graphs</h1>
+
+    <div>
+      <input type="text", id="search", placeholder="Search for pipeline">
+    </div>
+    <div id="pipelines"></div>
+
+    <script>
+        document.addEventListener('keyup', function(e) {
+          if (e.key == "Escape") {
+            removePipelineOverlay();
+          }
+        });
+
+
+        for (let iframe of document.getElementsByClassName("internalframe")) {
+          iframe.addEventListener('keyup', function(e) {
+            if (e.key == "Escape") {
+              removePipelineOverlay();
+            }
+          });
+        }
+
+    </script>
+  </body>
+</html>
+
+
