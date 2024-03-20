@@ -371,8 +371,11 @@ impl GstDots {
                 .route("/", web::get().to(index))
                 .service(actix_files::Files::new("/js", "./js").show_files_listing())
                 .service(actix_files::Files::new("/css", "./css").show_files_listing())
+                .service(actix_files::Files::new("/images", "./images").show_files_listing())
                 .service(actix_files::Files::new("/svg", "./.generated/svg").show_files_listing())
-                .service(actix_files::Files::new("/viewer", "./.generated/html").show_files_listing())
+                .service(
+                    actix_files::Files::new("/viewer", "./.generated/html").show_files_listing(),
+                )
                 .route("/ws/", web::get().to(ws_index))
         })
         .bind(&address)?
