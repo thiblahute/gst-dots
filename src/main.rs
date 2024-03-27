@@ -4,6 +4,7 @@ use actix::Message;
 use actix::{Actor, Handler, StreamHandler};
 use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
+use actix_web_static_files::ResourceFiles;
 use clap::{ArgAction, Parser};
 use notify::Watcher;
 use once_cell::sync::Lazy;
@@ -13,10 +14,11 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, Mutex};
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
 use tokio::runtime;
 use tracing::instrument;
 use tracing::{event, Level};
+
+include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
 pub static RUNTIME: Lazy<runtime::Runtime> = Lazy::new(|| {
     runtime::Builder::new_multi_thread()
@@ -50,9 +52,8 @@ struct GstDots {
     gstdot_path: std::path::PathBuf,
     svg_path: std::path::PathBuf,
     html_path: std::path::PathBuf,
-    clients: Arc<Mutex<Vec<Addr<MyWebSocket>>>>,
+    clients: Arc<Mutex<Vec<Addr<WebSocket>>>>,
     dot_watcher: Mutex<Option<notify::RecommendedWatcher>>,
-    svg_watcher: Mutex<Option<notify::RecommendedWatcher>>,
     args: Args,
 }
 
@@ -65,7 +66,7 @@ impl GstDots {
                 path.push("gstreamer-dots");
                 path
             });
-        std::fs::create_dir_all(&gstdot_path).expect("Failed to create svg directory");
+        std::fs::create_dir_all(&gstdot_path).expect("Failed to create dot directory");
 
         let mut svg_path = std::env::current_dir().unwrap();
         svg_path.push(".generated/svg");
@@ -82,11 +83,8 @@ impl GstDots {
             args: Args::parse(),
             clients: Arc::new(Mutex::new(Vec::new())),
             dot_watcher: Default::default(),
-            svg_watcher: Default::default(),
         });
         app.watch_dot_files();
-        app.watch_svg_files();
-        app.init_files();
         app.cleanup_dirs();
 
         app
@@ -123,107 +121,57 @@ impl GstDots {
         self.gstdot_path.join(file_name).with_extension("dot")
     }
 
-    fn svg_path_from_dot_path(&self, dot_path: &std::path::Path) -> std::path::PathBuf {
-        let file_name = dot_path.file_name().unwrap();
-
-        self.svg_path.join(file_name).with_extension("svg")
+    fn modify_time(&self, path: &std::path::Path) -> u128 {
+        self.dot_path_for_file(path)
+            .metadata()
+            .map(|m| m.modified().unwrap_or(std::time::UNIX_EPOCH))
+            .unwrap_or(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
     }
 
-    fn init_files(self: &Arc<Self>) {
-        event!(
-            Level::DEBUG,
-            "Generate svgs for dot files in {:?}",
-            self.gstdot_path
-        );
-        let app_clone = self.clone();
-        if let Ok(entries) = std::fs::read_dir(&self.gstdot_path) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().map(|e| e == "dot").unwrap_or(false)
-                    && !app_clone.svg_path_from_dot_path(&path).exists()
-                {
-                    let app_clone = app_clone.clone();
-                    let path = path.to_path_buf();
+    fn list_dots(&self, client: Addr<WebSocket>) {
+        event!(Level::DEBUG, "Listing dot files in {:?}", self.gstdot_path);
+        let mut entries: Vec<(std::path::PathBuf, std::time::SystemTime)> = Vec::new();
 
-                    RUNTIME.spawn(async move {
-                        app_clone.generate_svg(path.as_path()).await;
-                    });
+        if let Ok(read_dir) = std::fs::read_dir(&self.gstdot_path) {
+            // Collect valid entries and their modification times
+            for entry in read_dir.flatten() {
+                let dot_path = entry.path();
+                if dot_path.extension().and_then(|e| e.to_str()) == Some("dot") {
+                    if let Ok(metadata) = dot_path.metadata() {
+                        if let Ok(modified) = metadata.modified() {
+                            entries.push((dot_path, modified));
+                        }
+                    }
                 }
             }
         }
-    }
 
-    fn list_svgs(&self, client: Addr<MyWebSocket>) {
-        event!(Level::DEBUG, "Listing svg files in {:?}", self.svg_path);
-        if let Ok(entries) = std::fs::read_dir(&self.svg_path) {
-            for entry in entries.flatten() {
-                let svg_path = entry.path();
-                if let Some("svg") = svg_path.extension().and_then(|e| e.to_str()) {
-                    client.do_send(TextMessage(
-                        json!({
-                            "type": "SvgCreated",
-                            "path": [svg_path.strip_prefix(&self.svg_path).unwrap()]
-                        })
-                        .to_string(),
-                    ));
+        entries.sort_by(|a, b| a.1.cmp(&b.1));
+
+        for (dot_path, _) in entries {
+            let content = match std::fs::read_to_string(&dot_path) {
+                Ok(c) => c,
+                Err(_) => {
+                    event!(Level::ERROR, "===>Error reading file: {:?}", dot_path);
+                    continue;
                 }
+            };
+            if content.is_empty() {
+                event!(Level::ERROR, "===>Empty file: {:?}", dot_path);
+                continue;
             }
-        }
-    }
-
-    fn watch_svg_files(self: &Arc<Self>) {
-        let watcher_app = self.clone();
-        let mut svg_watcher = notify::recommended_watcher(move |event| match event {
-            Ok(event) => watcher_app.notify_file_event(&event),
-            Err(err) => event!(Level::ERROR, "watch error: {:?}", err),
-        })
-        .expect("Could not create svg_watcher");
-
-        event!(Level::INFO, "Watching svg files in {:?}", self.svg_path);
-        svg_watcher
-            .watch(self.svg_path.as_path(), notify::RecursiveMode::Recursive)
-            .unwrap();
-        *self.svg_watcher.lock().unwrap() = Some(svg_watcher);
-    }
-
-    async fn generate_svg(self: &Arc<Self>, dot_path: &std::path::Path) {
-        let svg_path = self.svg_path_from_dot_path(dot_path);
-
-        event!(
-            Level::DEBUG,
-            "Generating svg for {dot_path:?} into {svg_path:?}"
-        );
-        let output = match Command::new("dot")
-            .arg("-Tsvg")
-            .arg(dot_path)
-            .arg("-o")
-            .arg(&svg_path)
-            .output()
-            .await
-        {
-            Ok(output) => output,
-            Err(err) => {
-                event!(Level::ERROR, "Failed to execute dot: {:?}", err);
-                return;
-            }
-        };
-
-        if output.status.success() {
-            event!(Level::INFO, "Generated svg: {:?}", svg_path);
-            let clients = self.clients.lock().unwrap();
-            let clients = clients.clone();
-
-            for client in clients.iter() {
-                client.do_send(TextMessage(
-                    json!({
-                        "type": "SvgCreated",
-                        "path": [svg_path.strip_prefix(&self.svg_path).unwrap()]
-                    })
-                    .to_string(),
-                ));
-            }
-        } else {
-            event!(Level::ERROR, "Failed to generate svg: {:?}", output);
+            client.do_send(TextMessage(
+                json!({
+                    "type": "NewDot",
+                    "name": dot_path.file_name().unwrap().to_str().unwrap(),
+                    "content": content,
+                    "creation_time": self.modify_time(&dot_path),
+                })
+                .to_string(),
+            ));
         }
     }
 
@@ -239,16 +187,26 @@ impl GstDots {
                             .any(|p| p.extension().map(|e| e == "dot").unwrap_or(false))
                         {
                             match event.kind {
-                                notify::event::EventKind::Create(_) => {
+                                notify::event::EventKind::Modify(notify::event::ModifyKind::Data(notify::event::DataChange::Content)) => {
                                     for path in event.paths.iter() {
                                         event!(Level::INFO, "File created: {:?}", path);
                                         if path.extension().map(|e| e == "dot").unwrap_or(false) {
-                                            let app_clone = app_clone.clone();
                                             let path = path.to_path_buf();
+                                            let clients = app_clone.clients.lock().unwrap();
+                                            let clients = clients.clone();
 
-                                            RUNTIME.spawn(async move {
-                                                app_clone.generate_svg(path.as_path()).await;
-                                            });
+                                            for client in clients.iter() {
+                                                event!(Level::DEBUG, "Sending to client: {:?}", client);
+                                                client.do_send(TextMessage(
+                                                    json!({
+                                                        "type": "NewDot",
+                                                        "name": path.file_name().unwrap().to_str().unwrap(),
+                                                        "content": std::fs::read_to_string(&path).unwrap(),
+                                                        "creation_time": app_clone.modify_time(&event.paths[0]),
+                                                    })
+                                                    .to_string(),
+                                                ));
+                                            }
                                         }
                                     }
                                 }
@@ -257,13 +215,20 @@ impl GstDots {
                                     for path in event.paths.iter() {
                                         event!(Level::INFO, "File created: {:?}", path);
                                         if path.extension().map(|e| e == "dot").unwrap_or(false) {
-                                            let svg_path = app_clone.svg_path_from_dot_path(path);
-                                            if let Err(e) = std::fs::remove_file(svg_path) {
-                                                event!(
-                                                    Level::ERROR,
-                                                    "Failed to remove svg: {:?}",
-                                                    e
-                                                );
+                                            let path = path.to_path_buf();
+                                            let clients = app_clone.clients.lock().unwrap();
+                                            let clients = clients.clone();
+
+                                            for client in clients.iter() {
+                                                event!(Level::INFO, "Sending to client: {:?}", client);
+                                                client.do_send(TextMessage(
+                                                    json!({
+                                                        "type": "DotRemoved",
+                                                        "name": path.file_name().unwrap().to_str().unwrap(),
+                                                        "creation_time": app_clone.modify_time(&event.paths[0]),
+                                                    })
+                                                    .to_string(),
+                                                ));
                                             }
                                         }
                                     }
@@ -284,76 +249,19 @@ impl GstDots {
         *self.dot_watcher.lock().unwrap() = Some(dot_watcher);
     }
 
-    fn notify_file_event(&self, event: &notify::event::Event) {
-        let clients = self.clients.lock().unwrap();
-        let clients = clients.clone();
-
-        if event
-            .paths
-            .iter()
-            .any(|p| p.extension().map(|e| e == "svg").unwrap_or(false))
-        {
-            match event.kind {
-                notify::event::EventKind::Create(_) => {
-                    let paths = event
-                        .paths
-                        .iter()
-                        .map(|p| p.strip_prefix(&self.svg_path).unwrap())
-                        .collect::<Vec<_>>();
-                    event!(Level::INFO, "NEW SVG created: {:?}", paths);
-
-                    for client in clients.iter() {
-                        client.do_send(TextMessage(
-                            json!({
-                                "type": "SvgCreated",
-                                "path": paths
-                            })
-                            .to_string(),
-                        ));
-                    }
-                }
-                notify::event::EventKind::Modify(_) => {
-                    event!(Level::TRACE, "File modified: {:?}", event.paths);
-                }
-                notify::event::EventKind::Remove(_) => {
-                    event!(Level::INFO, "File removed: {:?}", event.paths);
-                    for client in clients.iter() {
-                        let paths = event
-                            .paths
-                            .iter()
-                            .map(|p| p.strip_prefix(&self.svg_path).unwrap())
-                            .collect::<Vec<_>>();
-                        for path in paths.iter() {
-                            client.do_send(TextMessage(
-                                json!({
-                                    "type": "SvgRemoved",
-                                    "path": path
-                                })
-                                .to_string(),
-                            ));
-                        }
-                    }
-                }
-                _ => {
-                    event!(Level::DEBUG, "File event: {:?}", event.paths);
-                }
-            }
-        }
-    }
-
     #[instrument(level = "trace")]
-    fn add_client(&self, client: Addr<MyWebSocket>) {
+    fn add_client(&self, client: Addr<WebSocket>) {
         let mut clients = self.clients.lock().unwrap();
 
         event!(Level::INFO, "Client added: {:?}", client);
         clients.push(client.clone());
         drop(clients);
 
-        self.list_svgs(client);
+        self.list_dots(client);
     }
 
     #[instrument(level = "trace")]
-    fn remove_client(&self, addr: &Addr<MyWebSocket>) {
+    fn remove_client(&self, addr: &Addr<WebSocket>) {
         event!(Level::INFO, "Client removed: {:?}", addr);
         let mut clients = self.clients.lock().unwrap();
         clients.retain(|a| a != addr);
@@ -365,18 +273,15 @@ impl GstDots {
         event!(Level::INFO, "Starting server on http://{}", address);
 
         HttpServer::new(move || {
+            let generated = generate();
             App::new()
                 .app_data(app_data.clone())
-                .route("/index.html", web::get().to(index))
-                .route("/", web::get().to(index))
-                .service(actix_files::Files::new("/js", "./js").show_files_listing())
-                .service(actix_files::Files::new("/css", "./css").show_files_listing())
-                .service(actix_files::Files::new("/images", "./images").show_files_listing())
+                .route("/ws/", web::get().to(ws_index))
                 .service(actix_files::Files::new("/svg", "./.generated/svg").show_files_listing())
                 .service(
                     actix_files::Files::new("/viewer", "./.generated/html").show_files_listing(),
                 )
-                .route("/ws/", web::get().to(ws_index))
+                .service(ResourceFiles::new("/", generated))
         })
         .bind(&address)?
         .run()
@@ -387,7 +292,7 @@ impl GstDots {
         self: &Arc<Self>,
         html_file_name: &str,
     ) -> Result<String, Box<dyn std::error::Error>> {
-        let template_content = include_str!("../templates/single_graph_template.html");
+        let template_content = include_str!("../static/templates/single_graph_template.html");
 
         let html_file_path = self.html_path.join(html_file_name);
         if html_file_path.exists() {
@@ -406,7 +311,7 @@ impl GstDots {
 }
 
 #[derive(Debug)]
-struct MyWebSocket {
+struct WebSocket {
     app: Arc<GstDots>,
 }
 
@@ -414,7 +319,7 @@ struct MyWebSocket {
 #[rtype(result = "()")] // Indicates that no response is expected
 pub struct TextMessage(pub String);
 
-impl Actor for MyWebSocket {
+impl Actor for WebSocket {
     type Context = ws::WebsocketContext<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
@@ -427,7 +332,7 @@ impl Actor for MyWebSocket {
     }
 }
 
-impl Handler<TextMessage> for MyWebSocket {
+impl Handler<TextMessage> for WebSocket {
     type Result = ();
 
     fn handle(&mut self, msg: TextMessage, ctx: &mut Self::Context) {
@@ -436,7 +341,7 @@ impl Handler<TextMessage> for MyWebSocket {
     }
 }
 
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWebSocket {
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocket {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         if let Ok(ws::Message::Text(text)) = msg {
             let message: Result<WsMessage, _> = serde_json::from_str(&text);
@@ -467,10 +372,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MyWebSocket {
     }
 }
 
-async fn index() -> Result<actix_files::NamedFile, Error> {
-    Ok(actix_files::NamedFile::open("./index.html")?)
-}
-
 async fn ws_index(
     req: HttpRequest,
     stream: web::Payload,
@@ -478,7 +379,7 @@ async fn ws_index(
 ) -> Result<HttpResponse, Error> {
     let app = data.get_ref().clone();
 
-    ws::start(MyWebSocket { app }, &req, stream)
+    ws::start(WebSocket { app }, &req, stream)
 }
 
 #[actix_web::main]
