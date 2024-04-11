@@ -21,16 +21,16 @@
  */
 
 
- +function ($) {
++function ($) {
   'use strict'
 
   // Cross Browser starts/endsWith support
   // =====================================
-  String.prototype.startsWith = function(prefix) {
+  String.prototype.startsWith = function (prefix) {
     return this.indexOf(prefix) == 0;
   };
 
-  String.prototype.endsWith = function(suffix) {
+  String.prototype.endsWith = function (suffix) {
     return this.indexOf(suffix, this.length - suffix.length) !== -1;
   };
 
@@ -38,15 +38,15 @@
   // ===================================
 
   var GraphvizSvg = function (element, options) {
-    this.type       = null
-    this.options    = null
-    this.enabled    = null
-    this.$element   = null
+    this.type = null
+    this.options = null
+    this.enabled = null
+    this.$element = null
 
     this.init('graphviz.svg', element, options)
   }
 
-  GraphvizSvg.VERSION  = '1.0.1'
+  GraphvizSvg.VERSION = '1.0.1'
 
   GraphvizSvg.GVPT_2_PX = 32.5 // used to ease removal of extra space
 
@@ -62,7 +62,7 @@
           placement: 'auto left',
           animation: false,
           viewport: null
-        }).on('hide.bs.tooltip', function() {
+        }).on('hide.bs.tooltip', function () {
           // keep them visible even if you acidentally mouse over
           if ($a.attr('data-tooltip-keepvisible')) {
             return false
@@ -99,15 +99,22 @@
     ready: null
   }
 
+  GraphvizSvg.prototype.onMouseUpdate = function (e) {
+    this.mousePosition = {
+      x: e.pageX,
+      y: e.pageY
+    };
+  }
+
   GraphvizSvg.prototype.init = function (type, element, options) {
-    this.enabled   = true
-    this.type      = type
-    this.$element  = $(element)
-    this.options   = this.getOptions(options)
+    this.enabled = true
+    this.type = type
+    this.$element = $(element)
+    this.options = this.getOptions(options)
 
     if (options.url) {
       var that = this
-      $.get(options.url, null, function(data) {
+      $.get(options.url, null, function (data) {
         var svg = $("svg", data)
         that.$element.html(document.adoptNode(svg[0]))
         that.setup()
@@ -118,6 +125,9 @@
       }
       this.setup()
     }
+
+    document.addEventListener('mousemove', this.onMouseUpdate.bind(this), false);
+    document.addEventListener('mouseenter', this.onMouseUpdate.bind(this), false);
   }
 
   GraphvizSvg.prototype.getDefaults = function () {
@@ -162,8 +172,8 @@
 
     // setup all the nodes and edges
     var that = this
-    this.$nodes.each(function () { that.setupNodesEdges($(this), true) })
-    this.$edges.each(function () { that.setupNodesEdges($(this), false) })
+    this.$nodes.each(function () {that.setupNodesEdges($(this), true)})
+    this.$edges.each(function () {that.setupNodesEdges($(this), false)})
 
     // remove the graph title element
     var $title = this.$graph.children('title')
@@ -204,7 +214,7 @@
     var $title = $el.children('title')
     if ($title[0]) {
       // remove any compass points:
-      var title = $title.text().replace(/:[snew][ew]?/g,'')
+      var title = $title.text().replace(/:[snew][ew]?/g, '')
       $el.attr('data-name', title)
       $title.remove()
       if (isNode) {
@@ -232,7 +242,7 @@
     }
 
     // remove namespace from a[xlink:title]
-    $el.children('a').filter(function () { return $(this).attr('xlink:title') }).each(function () {
+    $el.children('a').filter(function () {return $(this).attr('xlink:title')}).each(function () {
       var $a = $(this)
       $a.attr('title', $a.attr('xlink:title'))
       $a.removeAttr('xlink:title')
@@ -242,37 +252,37 @@
     })
   }
 
-  GraphvizSvg.prototype.setupZoom = function() {
+  GraphvizSvg.prototype.setupZoom = function () {
     var that = this
     var $element = this.$element
     var $svg = this.$svg
-    this.zoom = {width: $svg.attr('width'), height: $svg.attr('height'), percentage: null }
+    this.zoom = {width: $svg.attr('width'), height: $svg.attr('height'), percentage: null}
     this.scaleView(100.0)
     $element.mousewheel(function (evt) {
-        if (evt.ctrlKey) {
-          var percentage = that.zoom.percentage
-          percentage += evt.deltaY * evt.deltaFactor
-          if (percentage < 100.0) {
-            percentage = 100.0
-          }
-          // get pointer offset in view
-          // ratio offset within svg
-          var dx = evt.pageX - $svg.offset().left
-          var dy = evt.pageY - $svg.offset().top
-          var rx = dx / $svg.width()
-          var ry = dy / $svg.height()
-
-          // offset within frame ($element)
-          var px = evt.pageX - $element.offset().left
-          var py = evt.pageY - $element.offset().top
-
-          that.scaleView(percentage)
-          // scroll so pointer is still in same place
-          $element.scrollLeft((rx * $svg.width()) + 0.5 - px)
-          $element.scrollTop((ry * $svg.height()) + 0.5 - py)
-          return false // stop propogation
+      if (evt.ctrlKey) {
+        var percentage = that.zoom.percentage
+        percentage += evt.deltaY * evt.deltaFactor
+        if (percentage < 100.0) {
+          percentage = 100.0
         }
-      })
+        // get pointer offset in view
+        // ratio offset within svg
+        var dx = evt.pageX - $svg.offset().left
+        var dy = evt.pageY - $svg.offset().top
+        var rx = dx / $svg.width()
+        var ry = dy / $svg.height()
+
+        // offset within frame ($element)
+        var px = evt.pageX - $element.offset().left
+        var py = evt.pageY - $element.offset().top
+
+        that.scaleView(percentage)
+        // scroll so pointer is still in same place
+        $element.scrollLeft((rx * $svg.width()) + 0.5 - px)
+        $element.scrollTop((ry * $svg.height()) + 0.5 - py)
+        return false // stop propogation
+      }
+    })
 
     $element.on("keydown", function (evt) {
       console.log(evt)
@@ -288,13 +298,13 @@
       }
     })
     $element
-      .on('mousemove', function(e){
+      .on('mousemove', function (e) {
         var $svg = this.$svg
-        $element.css({'transform-origin': ((e.pageX - $(this).offset().left) / $(this).width()) * 100 + '% ' + ((e.pageY - $(this).offset().top) / $(this).height()) * 100 +'%'});
+        $element.css({'transform-origin': ((e.pageX - $(this).offset().left) / $(this).width()) * 100 + '% ' + ((e.pageY - $(this).offset().top) / $(this).height()) * 100 + '%'});
       })
   }
 
-  GraphvizSvg.prototype.scaleView = function(percentage) {
+  GraphvizSvg.prototype.scaleView = function (percentage) {
     var that = this
     var $svg = this.$svg
     $svg.attr('width', percentage + '%')
@@ -307,7 +317,37 @@
     })
   }
 
-  GraphvizSvg.prototype.scaleNode = function($node) {
+  GraphvizSvg.prototype.scaleInView = function (percentage) {
+    var that = this
+    var $svg = this.$svg
+    var $element = this.$element
+
+    // get pointer offset in view
+    // ratio offset within svg
+    var dx = this.mousePosition.x - $svg.offset().left
+    var dy = this.mousePosition.y - $svg.offset().top
+    var rx = dx / $svg.width()
+    var ry = dy / $svg.height()
+
+    // offset within frame ($element)
+    var px = this.mousePosition.x - $element.offset().left
+    var py = this.mousePosition.y - $element.offset().top
+
+    $svg.attr('width', percentage + '%')
+    $svg.attr('height', percentage + '%')
+    this.zoom.percentage = percentage
+    // now callback to update tooltip position
+    var $everything = this.$nodes.add(this.$edges)
+    $everything.children('a[title]').each(function () {
+      that.options.tooltips.update.call(this)
+    })
+
+    // scroll so pointer is still in same place
+    $element.scrollLeft((rx * $svg.width()) + 0.5 - px)
+    $element.scrollTop((ry * $svg.height()) + 0.5 - py)
+  }
+
+  GraphvizSvg.prototype.scaleNode = function ($node) {
     var dx = this.options.shrink.x
     var dy = this.options.shrink.y
     var tagName = $node.prop('tagName')
@@ -383,7 +423,7 @@
 
   GraphvizSvg.prototype.colorElement = function ($el, getColor) {
     var bg = this.$element.css('background')
-    $el.find('polygon, ellipse, path').each(function() {
+    $el.find('polygon, ellipse, path').each(function () {
       var $this = $(this)
       var color = $this.data('graphviz.svg.color')
       if (color.fill && $this.prop('tagName') != 'path') {
@@ -396,7 +436,7 @@
   }
 
   GraphvizSvg.prototype.restoreElement = function ($el) {
-    $el.find('polygon, ellipse, path').each(function() {
+    $el.find('polygon, ellipse, path').each(function () {
       var $this = $(this)
       var color = $this.data('graphviz.svg.color')
       if (color.fill) {
@@ -526,8 +566,8 @@
 
   function Plugin(option) {
     return this.each(function () {
-      var $this   = $(this)
-      var data    = $this.data('graphviz.svg')
+      var $this = $(this)
+      var data = $this.data('graphviz.svg')
       var options = typeof option == 'object' && option
 
       if (!data && /destroy/.test(option)) return
@@ -538,7 +578,7 @@
 
   var old = $.fn.graphviz
 
-  $.fn.graphviz             = Plugin
+  $.fn.graphviz = Plugin
   $.fn.graphviz.Constructor = GraphvizSvg
 
 
