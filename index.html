@@ -196,10 +196,15 @@
       }
     }
 
-    function connectWs() {
+    function getPort() {
+      return fetch("/port")
+        .then(response => response.json())
+        .then(response => response.port);
+    }
+
+    function connectWs(port) {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.hostname;
-      const port = 3000;
       const wsUrl = `${protocol}//${host}:${port}/ws/`;
       var pipelines_div = document.getElementById("pipelines");
 
@@ -251,7 +256,9 @@
       ws.onclose = (event) => {
           console.log('WebSocket disconnected', event.reason);
           // Try to reconnectin 10s
-          setTimeout(connectWs, 10000);
+          getPort().then(port => {
+            setTimeout(() => connectWs(port), 10000);
+          });
       };
 
       ws.onopen = () => {
@@ -266,8 +273,10 @@
     });
 
     document.addEventListener("DOMContentLoaded", function() {
-      connectWs();
-      connectSearch();
+      getPort().then(port => {
+          connectWs(port);
+          connectSearch();
+      });
     });
 
     function updateSearch() {
