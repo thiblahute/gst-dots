@@ -61,6 +61,20 @@ furnished to do so, subject to the following conditions:
           url: "{{ svg_file_path }}",
           ready: function() {
             var gv = this;
+            console.log(gv);
+            gv.$graph.children().toArray().forEach(child => {
+              if (child.className.baseVal == "cluster") {
+                Array.from(child.children).forEach(element => {
+                  if (element.textContent.startsWith("pipeline-dot=")) {
+                    let pipeline_dot = element.textContent.replace("pipeline-dot=\"","").replace(".dot\"", "");
+                    $(element).css('text-decoration', 'underline');
+                    $(element).click(function(evt) {
+                      document.location = "http://" + document.location.host + "?pipeline=" + pipeline_dot + ".html";
+                    })
+                  }
+                });
+              }
+            });
             gv.nodes().click(function () {
               var $set = $();
               $set.push(this);
