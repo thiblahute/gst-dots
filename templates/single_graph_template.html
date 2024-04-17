@@ -45,7 +45,7 @@ furnished to do so, subject to the following conditions:
 
     <div id="graph" style="width: 100%; height: 100%; overflow: scroll;"></div>
     <div class="floating-rectangle" id="instructions">
-      Click node to highlight<br/>Shift-Ctrl-scroll to zoom<br/>Esc to unhighlight
+      Click node to highlight<br/>Shift-Ctrl-scroll or w/s to zoom<br/>Esc to unhighlight
     </div>
 
 
@@ -61,6 +61,20 @@ furnished to do so, subject to the following conditions:
           url: "{{ svg_file_path }}",
           ready: function() {
             var gv = this;
+            console.log(gv);
+            gv.$graph.children().toArray().forEach(child => {
+              if (child.className.baseVal == "cluster") {
+                Array.from(child.children).forEach(element => {
+                  if (element.textContent.startsWith("pipeline-dot=")) {
+                    let pipeline_dot = element.textContent.replace("pipeline-dot=\"","").replace(".dot\"", "");
+                    $(element).css('text-decoration', 'underline');
+                    $(element).click(function(evt) {
+                      document.location = "http://" + document.location.host + "?pipeline=" + pipeline_dot + ".html";
+                    })
+                  }
+                });
+              }
+            });
             gv.nodes().click(function () {
               var $set = $();
               $set.push(this);
@@ -70,8 +84,14 @@ furnished to do so, subject to the following conditions:
               gv.bringToFront($set);
             });
             $(document).keydown(function (evt) {
-              if (evt.keyCode == 27) {
+              if (evt.key == "Escape") {
                 gv.highlight();
+              }
+              if (evt.key == "w") {
+                gv.scaleInView((gv.zoom.percentage + 100));
+              }
+              if (evt.key == "s") {
+                gv.scaleInView((gv.zoom.percentage - 100) || 100);
               }
             })
           }

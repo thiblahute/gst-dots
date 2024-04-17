@@ -2,7 +2,7 @@ use actix::Addr;
 use actix::AsyncContext;
 use actix::Message;
 use actix::{Actor, Handler, StreamHandler};
-use actix_web::{web, App, Error, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{get, web, App, Error, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use clap::{ArgAction, Parser};
 use notify::Watcher;
@@ -376,6 +376,7 @@ impl GstDots {
                 .service(
                     actix_files::Files::new("/viewer", "./.generated/html").show_files_listing(),
                 )
+                .service(port_route)
                 .route("/ws/", web::get().to(ws_index))
         })
         .bind(&address)?
@@ -479,6 +480,21 @@ async fn ws_index(
     let app = data.get_ref().clone();
 
     ws::start(MyWebSocket { app }, &req, stream)
+}
+
+#[derive(Serialize)]
+struct PortResponse {
+    port: u16,
+}
+
+#[get("/port")]
+async fn port_route(
+    data: web::Data<Arc<GstDots>>,
+) -> Result<web::Json<PortResponse>, Error> {
+    let response = PortResponse {
+        port: data.args.port,
+    };
+    Ok(web::Json(response))
 }
 
 #[actix_web::main]
