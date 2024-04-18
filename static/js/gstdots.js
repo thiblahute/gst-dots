@@ -103,9 +103,9 @@ async function createNewDotDiv(pipelines_div, dot_info) {
 
 
   if (pipelines_div.firstChild) {
-      pipelines_div.insertBefore(div, pipelines_div.firstChild);
+    pipelines_div.insertBefore(div, pipelines_div.firstChild);
   } else {
-      pipelines_div.appendChild(div);
+    pipelines_div.appendChild(div);
   }
 
   updateSearch();
