@@ -8,12 +8,10 @@ use actix_web_static_files::ResourceFiles;
 use clap::{ArgAction, Parser};
 use notify::Watcher;
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, Mutex};
-use tokio::io::AsyncWriteExt;
 use tokio::runtime;
 use tracing::instrument;
 use tracing::{event, Level};
@@ -27,12 +25,6 @@ pub static RUNTIME: Lazy<runtime::Runtime> = Lazy::new(|| {
         .build()
         .unwrap()
 });
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "type")]
-enum WsMessage {
-    Open { path: String },
-}
 
 /// Server configuration
 #[derive(Parser, Debug)]
@@ -287,27 +279,6 @@ impl GstDots {
         .run()
         .await
     }
-
-    async fn generate_viewer(
-        self: &Arc<Self>,
-        html_file_name: &str,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        let template_content = include_str!("../static/templates/single_graph_template.html");
-
-        let html_file_path = self.html_path.join(html_file_name);
-        if html_file_path.exists() {
-            return Ok(html_file_name.to_string());
-        }
-
-        let svg_file_path = format!("/svg/{}", html_file_name.replace(".html", ".svg"));
-        let graph_html = template_content.replace("{{ svg_file_path }}", &svg_file_path);
-        let graph_html = graph_html.replace("{{ TITLE }}", &html_file_name.replace(".html", ""));
-
-        let mut file = tokio::fs::File::create(html_file_path).await?;
-        file.write_all(graph_html.as_bytes()).await?;
-
-        Ok(html_file_name.to_string())
-    }
 }
 
 #[derive(Debug)]
@@ -342,32 +313,9 @@ impl Handler<TextMessage> for WebSocket {
 }
 
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocket {
-    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, _ctx: &mut Self::Context) {
         if let Ok(ws::Message::Text(text)) = msg {
-            let message: Result<WsMessage, _> = serde_json::from_str(&text);
-            event!(Level::INFO, "Message received: {:?}", message);
-
-            if let Ok(WsMessage::Open { path }) = message {
-                let app = self.app.clone();
-                let html_path = path.clone();
-
-                let client = ctx.address().clone();
-                RUNTIME.spawn(async move {
-                    match app.generate_viewer(&html_path).await {
-                        Ok(html_file_path) => {
-                            event!(Level::INFO, "Generated html: {:?}", html_file_path);
-                            client.do_send(TextMessage(
-                                json!({
-                                    "type": "HtmlCreated",
-                                    "path": html_file_path
-                                })
-                                .to_string(),
-                            ));
-                        }
-                        Err(e) => event!(Level::ERROR, "Failed to generate html: {:?}", e),
-                    }
-                });
-            }
+            event!(Level::INFO, "Message received: {:?}", text);
         }
     }
 }
