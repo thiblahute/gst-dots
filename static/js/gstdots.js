@@ -156,7 +156,7 @@ export function connectWs() {
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const host = window.location.hostname;
-  const port = 3000;
+  const port = window.location.port;
   const wsUrl = `${protocol}//${host}:${port}/ws/`;
   let pipelines_div = document.getElementById("pipelines");
 
