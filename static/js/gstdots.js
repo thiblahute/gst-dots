@@ -43,7 +43,7 @@ async function createOverlayElement(img, fname) {
 }
 
 function dotId(dot_info) {
-  return `${dot_info.creation_time}-${dot_info.name}`;
+  return `${dot_info.name}`;
 }
 
 async function generateSvg(img) {

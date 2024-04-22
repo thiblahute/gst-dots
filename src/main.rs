@@ -11,8 +11,11 @@ use once_cell::sync::Lazy;
 use serde_json::json;
 use std::collections::HashMap;
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 use tokio::runtime;
+use tracing::error;
 use tracing::instrument;
 use tracing::{event, Level};
 
@@ -123,23 +126,33 @@ impl GstDots {
             .as_millis()
     }
 
-    fn list_dots(&self, client: Addr<WebSocket>) {
-        event!(Level::DEBUG, "Listing dot files in {:?}", self.gstdot_path);
-        let mut entries: Vec<(std::path::PathBuf, std::time::SystemTime)> = Vec::new();
-
-        if let Ok(read_dir) = std::fs::read_dir(&self.gstdot_path) {
-            // Collect valid entries and their modification times
+    fn collect_dot_files(path: &PathBuf, entries: &mut Vec<(PathBuf, SystemTime)>) {
+        if let Ok(read_dir) = std::fs::read_dir(path) {
             for entry in read_dir.flatten() {
                 let dot_path = entry.path();
-                if dot_path.extension().and_then(|e| e.to_str()) == Some("dot") {
-                    if let Ok(metadata) = dot_path.metadata() {
-                        if let Ok(modified) = metadata.modified() {
-                            entries.push((dot_path, modified));
+                if dot_path.is_dir() {
+                    // Recursively call this function if the path is a directory
+                    Self::collect_dot_files(&dot_path, entries);
+                } else {
+                    // Process only `.dot` files
+                    if dot_path.extension().and_then(|e| e.to_str()) == Some("dot") {
+                        if let Ok(metadata) = dot_path.metadata() {
+                            if let Ok(modified) = metadata.modified() {
+                                entries.push((dot_path, modified));
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    fn list_dots(&self, client: Addr<WebSocket>) {
+        event!(Level::DEBUG, "Listing dot files in {:?}", self.gstdot_path);
+        let mut entries: Vec<(PathBuf, SystemTime)> = Vec::new();
+
+        let start_path = PathBuf::from(&self.gstdot_path);
+        Self::collect_dot_files(&start_path, &mut entries);
 
         entries.sort_by(|a, b| a.1.cmp(&b.1));
 
@@ -189,15 +202,18 @@ impl GstDots {
 
                                             for client in clients.iter() {
                                                 event!(Level::DEBUG, "Sending to client: {:?}", client);
-                                                client.do_send(TextMessage(
-                                                    json!({
-                                                        "type": "NewDot",
-                                                        "name": path.file_name().unwrap().to_str().unwrap(),
-                                                        "content": std::fs::read_to_string(&path).unwrap(),
-                                                        "creation_time": app_clone.modify_time(&event.paths[0]),
-                                                    })
-                                                    .to_string(),
-                                                ));
+                                                match std::fs::read_to_string(&path) {
+                                                    Ok(content) => client.do_send(TextMessage(
+                                                        json!({
+                                                            "type": "NewDot",
+                                                            "name": path.file_name().unwrap().to_str().unwrap(),
+                                                            "content": content,
+                                                            "creation_time": app_clone.modify_time(&event.paths[0]),
+                                                        })
+                                                        .to_string(),
+                                                    )),
+                                                    Err(err) => error!("Could not read file {path:?}: {err:?}"),
+                                                }
                                             }
                                         }
                                     }
