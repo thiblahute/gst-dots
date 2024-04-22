@@ -829,6 +829,7 @@ dependencies = [
  "askama",
  "clap",
  "dirs",
+ "glob",
  "notify",
  "once_cell",
  "serde",

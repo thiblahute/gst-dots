@@ -2,6 +2,7 @@
 name = "gstdots"
 version = "0.1.0"
 edition = "2021"
+default-run = "gstdots"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -22,6 +23,17 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 actix-web-static-files = "4.0"
 static-files = "0.2.1"
+glob = "0.3"
 
 [build-dependencies]
 static-files = "0.2.1"
+
+# Binary target for gstdots
+[[bin]]
+name = "gstdots"
+path = "src/main.rs"
+
+# Binary target for gstdump
+[[bin]]
+name = "gstdump"
+path = "src/gstdump.rs"
