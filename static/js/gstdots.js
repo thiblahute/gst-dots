@@ -64,9 +64,40 @@ async function generateSvg(img) {
 }
 
 async function createNewDotDiv(pipelines_div, dot_info) {
+  let path = dot_info.name;
+  let dirname = path.split('/');
+  let parent_div = pipelines_div;
+  if (dirname.length > 1) {
+    dirname = `/${dirname.slice(0, -1).join('/')}/`;
+  } else {
+    dirname = "/";
+  }
+  let div_id = `content-${dirname}`;
+  parent_div = document.getElementById(div_id);
+
+  if (!parent_div) {
+    parent_div = document.createElement("div");
+    parent_div.id = `dir-${dirname}`;
+    parent_div.className = "wrap-collabsible";
+    parent_div.innerHTML = `<input id="collapsible-${dirname}" class="toggle" type="checkbox">
+                              <label for="collapsible-${dirname}" class="lbl-toggle">${dirname}</label>
+                              <div class="collapsible-content" id="content-${dirname}">
+                              </div>`;
+
+    console.error(`Creating parent div for ${parent_div}`);
+    if (pipelines_div.firstChild) {
+      pipelines_div.insertBefore(parent_div, pipelines_div.firstChild);
+    } else {
+      pipelines_div.appendChild(parent_div);
+    }
+
+    parent_div = document.getElementById(`content-${dirname}`);
+  }
+
+
   let div = document.createElement("div");
   div.id = dotId(dot_info);
-  div.className = "pipelineDiv";
+  div.className = "content-inner pipelineDiv";
   div.setAttribute("data_score", "0");
   div.setAttribute("creation_time", dot_info.creation_time);
 
@@ -91,7 +122,6 @@ async function createNewDotDiv(pipelines_div, dot_info) {
   });
   observer.observe(img);
 
-  div.appendChild(document.createElement("hr"));
   div.appendChild(title);
   div.appendChild(img);
 
@@ -102,10 +132,10 @@ async function createNewDotDiv(pipelines_div, dot_info) {
   }
 
 
-  if (pipelines_div.firstChild) {
-    pipelines_div.insertBefore(div, pipelines_div.firstChild);
+  if (parent_div.firstChild) {
+    parent_div.insertBefore(div, parent_div.firstChild);
   } else {
-    pipelines_div.appendChild(div);
+    parent_div.appendChild(div);
   }
 
   updateSearch();
@@ -218,9 +248,12 @@ function updateSearch() {
   const input = document.getElementById('search');
   const allDivs = document.querySelectorAll('.pipelineDiv');
 
-  if (input.value === "") {
-    return;
+  if (document.querySelectorAll('.toggle').length == 1) {
+    // If the is only 1 folder,  expand  it
+    document.querySelector('.toggle').checked = true;
+  }
 
+  if (input.value === "") {
     let divs = Array.from(allDivs).map(div => {
       div.style.display = '';
       div.setAttribute("data_score", "0");

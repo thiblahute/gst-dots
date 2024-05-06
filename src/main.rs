@@ -11,6 +11,7 @@ use once_cell::sync::Lazy;
 use serde_json::json;
 use std::collections::HashMap;
 use std::fmt;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -83,6 +84,14 @@ impl GstDots {
         app.cleanup_dirs();
 
         app
+    }
+
+    fn relative_dot_path(&self, dot_path: &Path) -> String {
+        dot_path
+            .strip_prefix(&self.gstdot_path)
+            .unwrap()
+            .to_string_lossy()
+            .to_string()
     }
 
     fn cleanup_dirs(self: &Arc<Self>) {
@@ -168,10 +177,13 @@ impl GstDots {
                 event!(Level::ERROR, "===>Empty file: {:?}", dot_path);
                 continue;
             }
+
+            let name = self.relative_dot_path(&dot_path);
+            event!(Level::INFO, "Sending `{name}` to client: {client:?}");
             client.do_send(TextMessage(
                 json!({
                     "type": "NewDot",
-                    "name": dot_path.file_name().unwrap().to_str().unwrap(),
+                    "name": name,
                     "content": content,
                     "creation_time": self.modify_time(&dot_path),
                 })
@@ -201,12 +213,13 @@ impl GstDots {
                                             let clients = clients.clone();
 
                                             for client in clients.iter() {
-                                                event!(Level::DEBUG, "Sending to client: {:?}", client);
+                                                let name = app_clone.relative_dot_path(&path);
+                                                event!(Level::DEBUG, "Sending {name} to client: {client:?}");
                                                 match std::fs::read_to_string(&path) {
                                                     Ok(content) => client.do_send(TextMessage(
                                                         json!({
                                                             "type": "NewDot",
-                                                            "name": path.file_name().unwrap().to_str().unwrap(),
+                                                            "name": name,
                                                             "content": content,
                                                             "creation_time": app_clone.modify_time(&event.paths[0]),
                                                         })
