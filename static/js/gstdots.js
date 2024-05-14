@@ -250,7 +250,11 @@ function updateSearch() {
 
   if (document.querySelectorAll('.toggle').length == 1) {
     // If the is only 1 folder,  expand  it
-    document.querySelector('.toggle').checked = true;
+    toggle = document.querySelector('.toggle')
+    if (toggle && !toggle.auto_checked) {
+      toggle.checked = true;
+      toggle.auto_checked = true;
+    }
   }
 
   if (input.value === "") {
