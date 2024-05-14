@@ -41,6 +41,10 @@ struct Args {
     /// Server port
     #[arg(short, long, default_value_t = 3000, action = ArgAction::Set)]
     port: u16,
+
+    /// Server port
+    #[arg(short, long, action = ArgAction::Set)]
+    dotdir: Option<String>,
 }
 
 #[derive(Debug)]
@@ -55,9 +59,12 @@ struct GstDots {
 
 impl GstDots {
     fn new() -> Arc<Self> {
-        let gstdot_path = std::env::var("GST_DEBUG_DUMP_DOT_DIR")
+        let args = Args::parse();
+        let gstdot_path = args
+            .dotdir
+            .as_ref()
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| {
+            .unwrap_or_else(|| {
                 let mut path = dirs::cache_dir().expect("Failed to find cache directory");
                 path.push("gstreamer-dots");
                 path
@@ -76,7 +83,7 @@ impl GstDots {
             gstdot_path: gstdot_path.clone(),
             svg_path,
             html_path,
-            args: Args::parse(),
+            args,
             clients: Arc::new(Mutex::new(Vec::new())),
             dot_watcher: Default::default(),
         });
