@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use tokio::runtime;
+use tracing::debug;
 use tracing::error;
 use tracing::info;
 use tracing::instrument;
@@ -53,6 +54,9 @@ struct Args {
 
     #[arg(short, long)]
     open: bool,
+
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 struct GstDots {
@@ -141,16 +145,15 @@ impl GstDots {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if self.dot_path_for_file(&path).exists() {
-                    event!(Level::DEBUG, "Keeping {ext}: {path:?}");
+                    debug!("Keeping {ext}: {path:?}");
                     continue;
                 }
 
                 if path.extension().map(|e| &e == ext).unwrap_or(false) {
                     if let Err(e) = std::fs::remove_file(&path) {
-                        event!(Level::ERROR, "Failed to remove {ext}: {:?}", e);
+                        error!("Failed to remove {ext}: {:?}", e);
                     } else {
-                        event!(
-                            Level::INFO,
+                        info!(
                             "Removed {ext}: {path:?}, {:?} does not exist",
                             self.dot_path_for_file(&path)
                         );
@@ -220,7 +223,7 @@ impl GstDots {
             }
 
             let name = self.relative_dot_path(&dot_path);
-            info!("Sending `{name}` to client: {client:?}");
+            debug!("Sending `{name}` to client: {client:?}");
             client.do_send(TextMessage(
                 json!({
                     "type": "NewDot",
@@ -247,7 +250,7 @@ impl GstDots {
                             match event.kind {
                                 notify::event::EventKind::Modify(notify::event::ModifyKind::Data(notify::event::DataChange::Content)) => {
                                     for path in event.paths.iter() {
-                                        info!("File created: {:?}", path);
+                                        debug!("File created: {:?}", path);
                                         if path.extension().map(|e| e == "dot").unwrap_or(false) {
                                             let path = path.to_path_buf();
                                             let clients = app_clone.clients.lock().unwrap();
@@ -273,16 +276,16 @@ impl GstDots {
                                     }
                                 }
                                 notify::event::EventKind::Remove(_) => {
-                                    info!("File removed: {:?}", event.paths);
+                                    debug!("File removed: {:?}", event.paths);
                                     for path in event.paths.iter() {
-                                        info!("File created: {:?}", path);
+                                        debug!("File created: {:?}", path);
                                         if path.extension().map(|e| e == "dot").unwrap_or(false) {
                                             let path = path.to_path_buf();
                                             let clients = app_clone.clients.lock().unwrap();
                                             let clients = clients.clone();
 
                                             for client in clients.iter() {
-                                                info!("Sending to client: {:?}", client);
+                                                debug!("Sending to client: {:?}", client);
                                                 client.do_send(TextMessage(
                                                     json!({
                                                         "type": "DotRemoved",
@@ -466,7 +469,7 @@ impl Handler<TextMessage> for WebSocket {
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WebSocket {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, _ctx: &mut Self::Context) {
         if let Ok(ws::Message::Text(text)) = msg {
-            info!("Message received: {:?}", text);
+            debug!("Message received: {:?}", text);
         }
     }
 }
@@ -483,17 +486,23 @@ async fn ws_index(
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
     tracing_subscriber::fmt()
         .compact()
         .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
         .with_env_filter(
             tracing_subscriber::filter::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                tracing_subscriber::filter::EnvFilter::new("warn,gstdots=info")
+                tracing_subscriber::filter::EnvFilter::new(format!(
+                    "warn{}",
+                    if args.verbose {
+                        ",gstdots=trace"
+                    } else {
+                        ",gstdots=info"
+                    }
+                ))
             }),
         )
         .init();
-
-    let args = Args::parse();
 
     let gstdots = GstDots::new(args);
     gstdots.run().await
