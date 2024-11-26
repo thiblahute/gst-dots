@@ -21,7 +21,8 @@ fn main() {
     println!("Dumping GStreamer pipelines into {:?}", gstdot_path);
 
     // Build the glob pattern and remove existing .dot files
-    let pattern = gstdot_path.join("*.dot*").to_string_lossy().into_owned();
+    let pattern = gstdot_path.join("**/*.dot*").to_string_lossy().into_owned();
+    println!("Removing existing .dot files matching {pattern}");
     for entry in glob(&pattern).expect("Failed to read glob pattern") {
         match entry {
             Ok(path) => {
